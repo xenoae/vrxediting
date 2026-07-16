@@ -1,5 +1,5 @@
 FROM node:20-slim
-# rebuild
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends python3 python3-pip ffmpeg ca-certificates curl && \
     pip3 install --break-system-packages -U yt-dlp && \
@@ -7,7 +7,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev && npm ls cors express
 COPY . .
 
 ENV PORT=8787
