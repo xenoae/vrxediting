@@ -160,6 +160,10 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
         label: h ? `${h}p` : (f.format_note || f.format_id),
         ext: f.ext,
         approx_filesize: f.filesize || f.filesize_approx || null,
+        // Only set when yt-dlp reports an exact (not estimated) size — safe to
+        // send as a hard Content-Length since these download as a raw passthrough,
+        // no transcoding or merging that could change the final byte count.
+        exact_filesize: f.filesize || null,
         merged: false,
       });
     }
@@ -195,7 +199,7 @@ function sanitizeFilename(title) {
 }
 
 app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
-  const { url, format_id: formatId, title } = req.query;
+  const { url, format_id: formatId, title, filesize } = req.query;
   if (!isValidYoutubeUrl(url)) {
     return res.status(400).json({ error: 'Provide a valid youtube.com or youtu.be URL.' });
   }
@@ -208,14 +212,16 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
   }
 
   const safeTitle = sanitizeFilename(title);
+  const isMerged = formatId.includes('+');
+  const isAudio = formatId === 'audio';
 
   let args;
   let filename;
-  if (formatId === 'audio') {
+  if (isAudio) {
     args = ['-f', 'bestaudio', '-x', '--audio-format', 'mp3', '--no-playlist', '-o', '-', url];
     filename = (safeTitle || 'audio') + '.mp3';
     res.setHeader('Content-Type', 'audio/mpeg');
-  } else if (formatId.includes('+')) {
+  } else if (isMerged) {
     // Video-only + audio-only, needs ffmpeg to mux into one file.
     args = ['-f', formatId, '--merge-output-format', 'mp4', '--no-playlist', '-o', '-', url];
     filename = (safeTitle || 'video') + '.mp4';
@@ -225,6 +231,14 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
     filename = (safeTitle || 'video') + '.mp4';
     res.setHeader('Content-Type', 'video/mp4');
   }
+
+  // Deliberately NOT setting Content-Length here, even for the progressive
+  // case. yt-dlp's reported "exact" filesize isn't guaranteed to match the
+  // actual streamed byte count precisely, and if it's off in either
+  // direction, the browser either truncates the download or hangs waiting
+  // for bytes that never come. Chunked transfer (no Content-Length) is
+  // slower to show a progress bar but is the version that can't corrupt
+  // the file — correctness over a nicer progress UI.
 
   // Content-Disposition needs an ASCII-safe fallback (old clients) plus a
   // UTF-8 encoded version (filename*) so titles with emoji/non-Latin text
@@ -238,6 +252,12 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
   const proc = spawn(YTDLP, ['--no-warnings', ...cookieArgs(), ...args]);
 
   proc.stdout.pipe(res);
+
+  proc.stdout.on('error', (e) => {
+    // Broken pipe / client disconnected mid-stream — log it so it's visible
+    // in deploy logs instead of silently vanishing, but don't crash the process.
+    console.error('Download stream error:', e.message);
+  });
 
   let errBuf = '';
   proc.stderr.on('data', (d) => { errBuf += d; });
