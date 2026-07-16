@@ -174,6 +174,7 @@ canvas{max-width:100%;border-radius:8px}
 
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js"></script>
 </head>
 <body>
 <div class="nav-fade"></div>
@@ -224,6 +225,7 @@ canvas{max-width:100%;border-radius:8px}
   <div class="pill-tab" data-tab="edit-gif" onclick="switchTab('edit','edit-gif')"><i class="fa-solid fa-film"></i> GIF Maker</div>
   <div class="pill-tab" data-tab="edit-audio" onclick="switchTab('edit','edit-audio')"><i class="fa-solid fa-waveform-lines"></i> Audio Extractor</div>
   <div class="pill-tab" data-tab="edit-cover" onclick="switchTab('edit','edit-cover')"><i class="fa-solid fa-panorama"></i> Cover Designer</div>
+  <div class="pill-tab" data-tab="edit-bg" onclick="switchTab('edit','edit-bg')"><i class="fa-solid fa-person-circle-minus"></i> Background Remover</div>
 </div>
 
 <div class="tool-panel" id="panel-edit-palette" >
@@ -487,6 +489,47 @@ Line of dialogue here."></textarea>
       </div>
     </div>
 </div>
+
+<div class="tool-panel" id="panel-edit-bg" style="display:none;">
+<div class="panel panel-pad">
+  <div class="dropzone" id="edit-bg-dropzone">
+    <i class="fa-solid fa-cloud-arrow-up"></i>
+    <div><strong>Drop a photo</strong> or click to browse</div>
+    <div class="hint">Works best on a single clear subject &mdash; JPG or PNG</div>
+    <input type="file" id="edit-bg-fileInput" accept="image/*" style="display:none;">
+  </div>
+
+  <div id="edit-bg-loadingWrap" style="display:none; margin-top:18px;">
+    <div class="readout">
+      <span class="ro-label">Status</span>
+      <div class="ro-value" id="edit-bg-status" style="font-size:14px;">Loading model&hellip;</div>
+    </div>
+  </div>
+
+  <div id="edit-bg-resultArea" style="display:none; margin-top:18px;">
+    <div class="grid-2">
+      <div>
+        <div class="hint" style="margin-bottom:8px; text-align:center;">Original</div>
+        <img id="edit-bg-original" style="width:100%; border-radius:8px; border:1px solid var(--border2);">
+      </div>
+      <div>
+        <div class="hint" style="margin-bottom:8px; text-align:center;">Background removed</div>
+        <div style="background-image:linear-gradient(45deg,#2a2a2a 25%,transparent 25%),linear-gradient(-45deg,#2a2a2a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#2a2a2a 75%),linear-gradient(-45deg,transparent 75%,#2a2a2a 75%); background-size:16px 16px; background-position:0 0,0 8px,8px -8px,-8px 0; border-radius:8px; border:1px solid var(--border2); overflow:hidden;">
+          <canvas id="edit-bg-outputCanvas" style="width:100%; display:block;"></canvas>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block" id="edit-bg-downloadBtn" style="margin-top:16px;"><i class="fa-solid fa-download"></i> Download PNG (transparent background)</button>
+  </div>
+</div>
+
+<div class="divider"></div>
+<div class="note">
+  <i class="fa-solid fa-circle-info"></i>
+  <div>This runs a real segmentation model right in your browser (Google's MediaPipe Selfie Segmentation) &mdash; nothing is uploaded anywhere. First run downloads the model (a few MB), so it takes a moment to start.</div>
+</div>
+</div>
+
 </div>
 
 <footer class="site-footer">
@@ -1161,6 +1204,98 @@ document.getElementById('edit-cover-exportBtn').addEventListener('click', functi
   full.toBlob(function(blob){
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a'); a.href = url; a.download = 'cover.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
+  }, 'image/png');
+});
+})();
+
+(function(){
+var dropzone = document.getElementById('edit-bg-dropzone');
+var fileInput = document.getElementById('edit-bg-fileInput');
+var loadingWrap = document.getElementById('edit-bg-loadingWrap');
+var statusEl = document.getElementById('edit-bg-status');
+var resultArea = document.getElementById('edit-bg-resultArea');
+var originalImg = document.getElementById('edit-bg-original');
+var canvas = document.getElementById('edit-bg-outputCanvas');
+var ctx = canvas.getContext('2d');
+var downloadBtn = document.getElementById('edit-bg-downloadBtn');
+
+var segmenter = null;
+var segmenterReady = null;
+
+function getSegmenter(){
+  if(segmenterReady) return segmenterReady;
+  segmenterReady = new Promise(function(resolve, reject){
+    try{
+      segmenter = new SelfieSegmentation({
+        locateFile: function(file){ return 'https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/' + file; }
+      });
+      segmenter.setOptions({ modelSelection: 1 });
+      segmenter.onResults(function(results){
+        if(segmenter._pendingResolve){
+          segmenter._pendingResolve(results);
+          segmenter._pendingResolve = null;
+        }
+      });
+      resolve(segmenter);
+    }catch(e){ reject(e); }
+  });
+  return segmenterReady;
+}
+
+dropzone.addEventListener('click', function(){ fileInput.click(); });
+dropzone.addEventListener('dragover', function(e){ e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', function(){ dropzone.classList.remove('drag'); });
+dropzone.addEventListener('drop', function(e){
+  e.preventDefault(); dropzone.classList.remove('drag');
+  if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', function(){ if(fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(file){
+  var url = URL.createObjectURL(file);
+  var img = new Image();
+  img.onload = function(){
+    originalImg.src = url;
+    resultArea.style.display = 'none';
+    loadingWrap.style.display = 'block';
+    statusEl.textContent = 'Loading model\u2026';
+    runSegmentation(img);
+  };
+  img.src = url;
+}
+
+async function runSegmentation(img){
+  try{
+    var seg = await getSegmenter();
+    statusEl.textContent = 'Removing background\u2026';
+
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+
+    var resultPromise = new Promise(function(resolve){ seg._pendingResolve = resolve; });
+    await seg.send({ image: img });
+    var results = await resultPromise;
+
+    ctx.save();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    loadingWrap.style.display = 'none';
+    resultArea.style.display = 'block';
+  }catch(e){
+    statusEl.textContent = 'Something went wrong: ' + e.message;
+  }
+}
+
+downloadBtn.addEventListener('click', function(){
+  canvas.toBlob(function(blob){
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url; a.download = 'background-removed.png';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(url); }, 3000);
   }, 'image/png');
