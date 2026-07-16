@@ -1,11 +1,13 @@
 {
-  "name": "vrx-editing-frontend",
+  "name": "vrx-editing-downloader-backend",
   "version": "1.0.0",
-  "private": true,
+  "description": "Small Express service wrapping yt-dlp for VRX Editing's YouTube Downloader page.",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^4.19.2"
   }
 }
