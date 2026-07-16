@@ -6,8 +6,8 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package*.json ./
-RUN npm install --omit=dev && npm ls cors express
+COPY . .
+RUN rm -rf node_modules && npm install --omit=dev && npm ls cors express
 COPY . .
 
 ENV PORT=8787
