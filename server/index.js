@@ -48,6 +48,15 @@ function cookieArgs() {
   return cookiesLoaded ? ['--cookies', COOKIES_PATH] : [];
 }
 
+// Routes yt-dlp's traffic through a residential proxy (if configured) instead
+// of Railway's own IP. Fixes YouTube's bot-check treating datacenter IPs as
+// suspicious — the proxy makes requests look like they're coming from a
+// normal home internet connection instead.
+//   PROXY_URL example: http://username:password@gw.dataimpulse.com:823
+function proxyArgs() {
+  return process.env.PROXY_URL ? ['--proxy', process.env.PROXY_URL] : [];
+}
+
 app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json());
 // Raw text body for the cookies-push endpoint (Netscape-format cookies.txt content).
@@ -80,7 +89,7 @@ function rateLimit(max, windowMs) {
 
 function runYtdlpJson(url, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(YTDLP, ['-j', '--no-warnings', '--no-playlist', ...cookieArgs(), url]);
+    const proc = spawn(YTDLP, ['-j', '--no-warnings', '--no-playlist', ...cookieArgs(), ...proxyArgs(), url]);
     let out = '', err = '';
     const timer = setTimeout(() => { proc.kill('SIGKILL'); reject(new Error('yt-dlp timed out')); }, timeoutMs);
 
@@ -249,7 +258,7 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
     `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`
   );
 
-  const proc = spawn(YTDLP, ['--no-warnings', ...cookieArgs(), ...args]);
+  const proc = spawn(YTDLP, ['--no-warnings', ...cookieArgs(), ...proxyArgs(), ...args]);
 
   proc.stdout.pipe(res);
 
@@ -309,7 +318,7 @@ app.post('/api/cookies', (req, res) => {
   }
 });
 
-app.get('/api/health', (req, res) => res.json({ ok: true, cookiesLoaded }));
+app.get('/api/health', (req, res) => res.json({ ok: true, cookiesLoaded, proxyConfigured: !!process.env.PROXY_URL }));
 
 app.listen(PORT, () => {
   console.log(`VRX Editing downloader backend listening on :${PORT}`);
