@@ -12,7 +12,8 @@
 //   PORT                default 8787
 //   YTDLP_PATH          default "yt-dlp"  (path to the binary if not on PATH)
 //   ALLOWED_ORIGIN      default "*"       (set to your frontend's origin in production)
-//   YTDLP_COOKIES_B64   optional          (base64-encoded cookies.txt — see README)
+//   YTDLP_COOKIES_B64   optional          (base64-encoded cookies.txt, loaded at startup)
+//   COOKIES_ADMIN_TOKEN optional          (bearer token to authorize POST /api/cookies)
 
 const express = require('express');
 const cors = require('cors');
@@ -25,27 +26,32 @@ const app = express();
 const PORT = process.env.PORT || 8787;
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+const COOKIES_ADMIN_TOKEN = process.env.COOKIES_ADMIN_TOKEN || null;
 
-// If cookies were provided (base64-encoded Netscape-format cookies.txt),
-// decode them to a file once at startup. YouTube's bot-check on datacenter
-// IPs is bypassed by passing a real logged-in session's cookies to yt-dlp.
-let COOKIES_PATH = null;
+// Fixed path, always available — populated either from YTDLP_COOKIES_B64 at
+// startup, or live via POST /api/cookies (e.g. from an external script that
+// keeps a real browser session logged in and pushes fresh cookies on a timer).
+const COOKIES_PATH = path.join(os.tmpdir(), 'yt-dlp-cookies.txt');
+let cookiesLoaded = false;
+
 if (process.env.YTDLP_COOKIES_B64) {
   try {
-    COOKIES_PATH = path.join(os.tmpdir(), 'yt-dlp-cookies.txt');
     fs.writeFileSync(COOKIES_PATH, Buffer.from(process.env.YTDLP_COOKIES_B64, 'base64'));
+    cookiesLoaded = true;
     console.log('Loaded cookies from YTDLP_COOKIES_B64 ->', COOKIES_PATH);
   } catch (e) {
     console.error('Failed to write cookies file:', e.message);
-    COOKIES_PATH = null;
   }
 }
+
 function cookieArgs() {
-  return COOKIES_PATH ? ['--cookies', COOKIES_PATH] : [];
+  return cookiesLoaded ? ['--cookies', COOKIES_PATH] : [];
 }
 
 app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json());
+// Raw text body for the cookies-push endpoint (Netscape-format cookies.txt content).
+app.use('/api/cookies', express.text({ type: '*/*', limit: '2mb' }));
 
 // Only accept youtube.com / youtu.be URLs — keeps this scoped to what it's
 // meant for instead of becoming a general-purpose extractor proxy.
@@ -235,7 +241,33 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
   });
 });
 
-app.get('/api/health', (req, res) => res.json({ ok: true, cookiesLoaded: !!COOKIES_PATH }));
+// POST /api/cookies — push fresh cookies.txt content live, no redeploy needed.
+// Body: raw Netscape-format cookies.txt text.
+// Header: Authorization: Bearer <COOKIES_ADMIN_TOKEN>
+app.post('/api/cookies', (req, res) => {
+  if (!COOKIES_ADMIN_TOKEN) {
+    return res.status(503).json({ error: 'COOKIES_ADMIN_TOKEN is not set on this server — refusing to accept cookie updates.' });
+  }
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (token !== COOKIES_ADMIN_TOKEN) {
+    return res.status(401).json({ error: 'Invalid or missing bearer token.' });
+  }
+  const body = (req.body || '').trim();
+  if (!body || !body.includes('youtube.com')) {
+    return res.status(400).json({ error: 'Body does not look like a youtube.com cookies.txt file.' });
+  }
+  try {
+    fs.writeFileSync(COOKIES_PATH, body);
+    cookiesLoaded = true;
+    console.log('Cookies updated live via /api/cookies at', new Date().toISOString());
+    res.json({ ok: true, updatedAt: new Date().toISOString() });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to write cookies file: ' + e.message });
+  }
+});
+
+app.get('/api/health', (req, res) => res.json({ ok: true, cookiesLoaded }));
 
 app.listen(PORT, () => {
   console.log(`VRX Editing downloader backend listening on :${PORT}`);
