@@ -1,4 +1,4 @@
-cd "C:\VRX Editing"
-git add server/index.js server/README.md
-git commit -m "Add cookie support to bypass YouTube bot detection"
+echo GIT.txt >> .gitignore
+git add .gitignore
+git commit -m "Ignore local notes file"
 git push
