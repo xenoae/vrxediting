@@ -1,4 +1,0 @@
-cd "C:\VRX Editing"
-git add -A
-git commit -m "Add background remover tool"
-git push
