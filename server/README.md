@@ -41,6 +41,35 @@ anywhere other than your own machine — it defaults to `*` for local testing.
   so the browser just downloads it directly from this URL.
 - `GET /api/health` — liveness check.
 
+## YouTube's bot check ("Sign in to confirm you're not a bot")
+
+Cloud server IPs (Railway, AWS, DigitalOcean, etc.) get this from YouTube
+constantly — it's not specific to this app. The fix is to pass cookies from
+a real, logged-in browser session so requests look like they're coming from
+an actual user instead of an anonymous datacenter IP.
+
+**Recommended: use a throwaway/secondary Google account for this**, not your
+main one — passing its session cookies to a server is a reasonable thing to
+do for a personal tool, but it's worth keeping separate from an account you
+care about.
+
+1. Log into YouTube in a normal browser tab with that account.
+2. Install a cookie-export extension — e.g. **"Get cookies.txt LOCALLY"**
+   for Chrome/Firefox.
+3. On youtube.com, export cookies as a `cookies.txt` file (Netscape format).
+4. Base64-encode the file:
+   - macOS/Linux: `base64 -i cookies.txt | tr -d '\n' > cookies.b64.txt`
+   - Windows (PowerShell): `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt")) | Out-File cookies.b64.txt`
+5. In Railway, on the **backend service** → **Variables**, add:
+   ```
+   YTDLP_COOKIES_B64 = <paste the base64 string>
+   ```
+6. Redeploy. Check `/api/health` — it should now return
+   `{"ok":true,"cookiesLoaded":true}`.
+
+Cookies expire eventually (typically weeks to a couple months) — if the bot
+check comes back after a while, just re-export and update the variable.
+
 ## Notes
 
 - Only accepts `youtube.com` / `youtu.be` URLs — it's intentionally not a

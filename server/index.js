@@ -9,18 +9,40 @@
 //   node index.js
 //
 // Env vars:
-//   PORT              default 8787
-//   YTDLP_PATH        default "yt-dlp"  (path to the binary if not on PATH)
-//   ALLOWED_ORIGIN    default "*"       (set to your frontend's origin in production)
+//   PORT                default 8787
+//   YTDLP_PATH          default "yt-dlp"  (path to the binary if not on PATH)
+//   ALLOWED_ORIGIN      default "*"       (set to your frontend's origin in production)
+//   YTDLP_COOKIES_B64   optional          (base64-encoded cookies.txt — see README)
 
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { spawn } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 8787;
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+
+// If cookies were provided (base64-encoded Netscape-format cookies.txt),
+// decode them to a file once at startup. YouTube's bot-check on datacenter
+// IPs is bypassed by passing a real logged-in session's cookies to yt-dlp.
+let COOKIES_PATH = null;
+if (process.env.YTDLP_COOKIES_B64) {
+  try {
+    COOKIES_PATH = path.join(os.tmpdir(), 'yt-dlp-cookies.txt');
+    fs.writeFileSync(COOKIES_PATH, Buffer.from(process.env.YTDLP_COOKIES_B64, 'base64'));
+    console.log('Loaded cookies from YTDLP_COOKIES_B64 ->', COOKIES_PATH);
+  } catch (e) {
+    console.error('Failed to write cookies file:', e.message);
+    COOKIES_PATH = null;
+  }
+}
+function cookieArgs() {
+  return COOKIES_PATH ? ['--cookies', COOKIES_PATH] : [];
+}
 
 app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json());
@@ -52,7 +74,7 @@ function rateLimit(max, windowMs) {
 
 function runYtdlpJson(url, timeoutMs = 20000) {
   return new Promise((resolve, reject) => {
-    const proc = spawn(YTDLP, ['-j', '--no-warnings', '--no-playlist', url]);
+    const proc = spawn(YTDLP, ['-j', '--no-warnings', '--no-playlist', ...cookieArgs(), url]);
     let out = '', err = '';
     const timer = setTimeout(() => { proc.kill('SIGKILL'); reject(new Error('yt-dlp timed out')); }, timeoutMs);
 
@@ -141,7 +163,7 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
   }
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-  const proc = spawn(YTDLP, ['--no-warnings', ...args]);
+  const proc = spawn(YTDLP, ['--no-warnings', ...cookieArgs(), ...args]);
 
   proc.stdout.pipe(res);
 
@@ -169,7 +191,7 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
   });
 });
 
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.get('/api/health', (req, res) => res.json({ ok: true, cookiesLoaded: !!COOKIES_PATH }));
 
 app.listen(PORT, () => {
   console.log(`VRX Editing downloader backend listening on :${PORT}`);
