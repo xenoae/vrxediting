@@ -62,12 +62,38 @@ app.use(express.json());
 // Raw text body for the cookies-push endpoint (Netscape-format cookies.txt content).
 app.use('/api/cookies', express.text({ type: '*/*', limit: '2mb' }));
 
-// Only accept youtube.com / youtu.be URLs — keeps this scoped to what it's
-// meant for instead of becoming a general-purpose extractor proxy.
-const YT_URL_RE = /^https?:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[\w-]{6,}/i;
+// Known platform URL patterns — keeps this scoped to specific supported
+// sites instead of becoming a general-purpose "fetch any URL" proxy.
+// yt-dlp already has native extractors for all of these; this is purely
+// about which URLs our own endpoints will accept.
+const PLATFORMS = [
+  { id: 'youtube', label: 'YouTube', icon: 'fa-youtube',
+    re: /^https?:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[\w-]{6,}/i },
+  { id: 'instagram', label: 'Instagram', icon: 'fa-instagram',
+    re: /^https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv)\/[\w-]+/i },
+  { id: 'tiktok', label: 'TikTok', icon: 'fa-tiktok',
+    re: /^https?:\/\/(www\.|vm\.|vt\.)?tiktok\.com\/(@[\w.-]+\/video\/\d+|[\w-]+\/?$)/i },
+  { id: 'twitter', label: 'X / Twitter', icon: 'fa-x-twitter',
+    re: /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/[\w-]+\/status\/\d+/i },
+  { id: 'facebook', label: 'Facebook', icon: 'fa-facebook',
+    re: /^https?:\/\/(www\.|m\.)?facebook\.com\/.+\/(videos|reel)\/[\w-]+/i },
+  { id: 'reddit', label: 'Reddit', icon: 'fa-reddit',
+    re: /^https?:\/\/(www\.)?reddit\.com\/r\/[\w-]+\/comments\/[\w-]+/i },
+  { id: 'vimeo', label: 'Vimeo', icon: 'fa-vimeo',
+    re: /^https?:\/\/(www\.)?vimeo\.com\/\d+/i },
+];
 
-function isValidYoutubeUrl(url) {
-  return typeof url === 'string' && YT_URL_RE.test(url.trim());
+function detectPlatform(url) {
+  if (typeof url !== 'string') return null;
+  const trimmed = url.trim();
+  for (const p of PLATFORMS) {
+    if (p.re.test(trimmed)) return p;
+  }
+  return null;
+}
+
+function isValidMediaUrl(url) {
+  return detectPlatform(url) !== null;
 }
 
 // Simple in-memory rate limit: N requests per IP per minute.
@@ -111,8 +137,11 @@ function runYtdlpJson(url, timeoutMs = 20000) {
 // GET /api/info?url=...
 app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
   const { url } = req.query;
-  if (!isValidYoutubeUrl(url)) {
-    return res.status(400).json({ error: 'Provide a valid youtube.com or youtu.be URL.' });
+  const platform = detectPlatform(url);
+  if (!platform) {
+    return res.status(400).json({
+      error: 'Unsupported URL. Supported: ' + PLATFORMS.map((p) => p.label).join(', ') + '.',
+    });
   }
 
   try {
@@ -120,11 +149,32 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
 
     const allFormats = data.formats || [];
 
+    // A post with no video/audio codecs at all (just an image format) is a
+    // plain photo post — Instagram posts and some tweets are this shape.
+    // Render this completely differently on the frontend (no quality table).
+    const isImagePost = allFormats.length > 0 &&
+      allFormats.every((f) => (!f.vcodec || f.vcodec === 'none') && (!f.acodec || f.acodec === 'none'));
+
+    if (isImagePost || (data.ext && ['jpg', 'jpeg', 'png', 'webp'].includes(data.ext))) {
+      const imgFormat = allFormats.length ? allFormats[allFormats.length - 1] : null;
+      return res.json({
+        type: 'image',
+        platform: platform.id,
+        platformLabel: platform.label,
+        title: data.title || null,
+        uploader: data.uploader,
+        thumbnail: data.thumbnail || (imgFormat && imgFormat.url) || null,
+        imageUrlFormatId: imgFormat ? imgFormat.format_id : null,
+        imageExt: (imgFormat && imgFormat.ext) || data.ext || 'jpg',
+      });
+    }
+
     // Progressive formats (video+audio already combined in one stream) —
     // these can be piped straight to the response with no merging needed.
-    // YouTube caps these around 720p.
+    // YouTube caps these around 720p; most other platforms only ever offer
+    // progressive formats anyway (no separate DASH streams to merge).
     const progressive = allFormats
-      .filter((f) => f.vcodec && f.vcodec !== 'none' && f.acodec && f.acodec !== 'none' && f.ext === 'mp4')
+      .filter((f) => f.vcodec && f.vcodec !== 'none' && f.acodec && f.acodec !== 'none')
       .sort((a, b) => (b.height || 0) - (a.height || 0));
 
     // Video-only formats (DASH) — this is where 1080p/1440p/4K actually live.
@@ -158,7 +208,8 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
       }
     }
 
-    // Progressive formats fill in 720p and below.
+    // Progressive formats fill in 720p and below (or the only formats at all
+    // on platforms that don't offer separate DASH streams).
     for (const f of progressive) {
       const h = f.height || 0;
       if (seen.has(h)) continue;
@@ -167,7 +218,7 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
         format_id: f.format_id,
         height: h,
         label: h ? `${h}p` : (f.format_note || f.format_id),
-        ext: f.ext,
+        ext: f.ext === 'mp4' ? 'mp4' : f.ext,
         approx_filesize: f.filesize || f.filesize_approx || null,
         // Only set when yt-dlp reports an exact (not estimated) size — safe to
         // send as a hard Content-Length since these download as a raw passthrough,
@@ -179,10 +230,17 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
 
     formats.sort((a, b) => b.height - a.height);
 
-    // Always offer an audio-only option (extracted to mp3 server-side).
-    formats.push({ format_id: 'audio', height: 0, label: 'Audio only (MP3)', ext: 'mp3', approx_filesize: null });
+    // Only offer audio extraction when there's actually an audio track to pull —
+    // some platforms/clips are silent, and offering a dead option is confusing.
+    const hasAudio = allFormats.some((f) => f.acodec && f.acodec !== 'none');
+    if (hasAudio) {
+      formats.push({ format_id: 'audio', height: 0, label: 'Audio only (MP3)', ext: 'mp3', approx_filesize: null });
+    }
 
     res.json({
+      type: 'video',
+      platform: platform.id,
+      platformLabel: platform.label,
       title: data.title,
       uploader: data.uploader,
       duration: data.duration,
@@ -190,7 +248,7 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
       formats,
     });
   } catch (e) {
-    res.status(502).json({ error: 'Could not fetch video info: ' + e.message });
+    res.status(502).json({ error: 'Could not fetch info: ' + e.message });
   }
 });
 
@@ -207,10 +265,12 @@ function sanitizeFilename(title) {
   return s || null;
 }
 
+const IMAGE_EXTS = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+
 app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
-  const { url, format_id: formatId, title, filesize } = req.query;
-  if (!isValidYoutubeUrl(url)) {
-    return res.status(400).json({ error: 'Provide a valid youtube.com or youtu.be URL.' });
+  const { url, format_id: formatId, title, filesize, ext } = req.query;
+  if (!isValidMediaUrl(url)) {
+    return res.status(400).json({ error: 'Unsupported or invalid URL.' });
   }
   if (!formatId) {
     return res.status(400).json({ error: 'Missing format_id — call /api/info first.' });
@@ -223,6 +283,7 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
   const safeTitle = sanitizeFilename(title);
   const isMerged = formatId.includes('+');
   const isAudio = formatId === 'audio';
+  const isImage = !isAudio && !isMerged && ext && IMAGE_EXTS[String(ext).toLowerCase()];
 
   let args;
   let filename;
@@ -235,6 +296,11 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
     args = ['-f', formatId, '--merge-output-format', 'mp4', '--no-playlist', '-o', '-', url];
     filename = (safeTitle || 'video') + '.mp4';
     res.setHeader('Content-Type', 'video/mp4');
+  } else if (isImage) {
+    const safeExt = String(ext).toLowerCase();
+    args = ['-f', formatId, '--no-playlist', '-o', '-', url];
+    filename = (safeTitle || 'image') + '.' + safeExt;
+    res.setHeader('Content-Type', IMAGE_EXTS[safeExt]);
   } else {
     args = ['-f', formatId, '--no-playlist', '-o', '-', url];
     filename = (safeTitle || 'video') + '.mp4';

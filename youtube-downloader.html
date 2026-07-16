@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%25' stop-color='%23f2a6c4'/><stop offset='100%25' stop-color='%23d16b93'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><text x='16' y='21' font-family='Roboto Mono, monospace' font-weight='700' font-size='11' fill='%23160a0e' text-anchor='middle'>VRX</text></svg>">
-<title>YouTube Downloader &mdash; VRX Editing</title>
+<title>Media Downloader &mdash; VRX Editing</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Roboto:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -186,7 +186,7 @@ canvas{max-width:100%;border-radius:8px}
   </div>
   <div class="nav-center">
     <a href="/" class="nav-link"><i class="fa-solid fa-grid-2" style="font-size:11px;margin-right:5px;"></i>All Tools</a>
-    <a href="/ytdl" class="nav-link active"><i class="fa-solid fa-download" style="font-size:11px;margin-right:5px;"></i>YouTube Downloader</a>
+    <a href="/ytdl" class="nav-link active"><i class="fa-solid fa-download" style="font-size:11px;margin-right:5px;"></i>Media Downloader</a>
     <a href="/tools" class="nav-link"><i class="fa-solid fa-scissors" style="font-size:11px;margin-right:5px;"></i>Edit Tools</a>
     <a href="/calculate" class="nav-link"><i class="fa-solid fa-calculator" style="font-size:11px;margin-right:5px;"></i>Calculate Tools</a>
   </div>
@@ -204,7 +204,7 @@ canvas{max-width:100%;border-radius:8px}
   </div>
   <div class="drawer-label">Tools</div>
   <a href="/" class="drawer-item"><i class="fa-solid fa-grid-2" style="width:16px;margin-right:8px;color:var(--text3);"></i>All Tools</a>
-  <a href="/ytdl" class="drawer-item active"><i class="fa-solid fa-download" style="width:16px;margin-right:8px;color:var(--text3);"></i>YouTube Downloader</a>
+  <a href="/ytdl" class="drawer-item active"><i class="fa-solid fa-download" style="width:16px;margin-right:8px;color:var(--text3);"></i>Media Downloader</a>
   <a href="/tools" class="drawer-item"><i class="fa-solid fa-scissors" style="width:16px;margin-right:8px;color:var(--text3);"></i>Edit Tools</a>
   <a href="/calculate" class="drawer-item"><i class="fa-solid fa-calculator" style="width:16px;margin-right:8px;color:var(--text3);"></i>Calculate Tools</a>
   <div class="drawer-divider"></div>
@@ -214,14 +214,14 @@ canvas{max-width:100%;border-radius:8px}
 <div class="wrap">
   <div class="hero">
     <div class="hero-label"><a href="/">Toolbelt</a> / Fetch</div>
-    <h1 class="hero-title"><i class="fa-solid fa-download"></i> YouTube Downloader</h1>
-    <p class="hero-desc">Fetch a video's available formats and download one directly, up to 4K &mdash; backed by your own yt-dlp service.</p>
+    <h1 class="hero-title"><i class="fa-solid fa-download"></i> Media Downloader</h1>
+    <p class="hero-desc">Paste a link from YouTube, Instagram, TikTok, X, Facebook, Reddit, or Vimeo &mdash; the platform is detected automatically. Backed by your own yt-dlp service, up to 4K on YouTube.</p>
   </div>
 
 <div class="panel panel-pad">
       <div class="note" style="margin-bottom:18px;">
         <i class="fa-solid fa-server"></i>
-        <div>Fetches format info and streams downloads through our own backend service &mdash; nothing here talks to YouTube directly from your browser.</div>
+        <div>Fetches format info and streams downloads through our own backend service &mdash; nothing here talks to these platforms directly from your browser.</div>
       </div>
 
       <div class="field" style="display:none;">
@@ -230,12 +230,15 @@ canvas{max-width:100%;border-radius:8px}
       </div>
 
       <div class="field">
-        <label for="ytUrl">YouTube URL</label>
+        <label for="ytUrl">Link</label>
         <div class="input-row">
-          <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=&hellip;">
+          <div style="position:relative; flex:1;">
+            <input type="text" id="ytUrl" placeholder="Paste a YouTube, Instagram, TikTok, X, Facebook, Reddit, or Vimeo link&hellip;" style="padding-left:40px;">
+            <i id="platformIcon" class="fa-solid fa-link" style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--text3); font-size:14px;"></i>
+          </div>
           <button class="btn btn-primary" id="fetchBtn" style="flex:0 0 auto;"><i class="fa-solid fa-magnifying-glass"></i> Fetch</button>
         </div>
-        <div class="hint" id="statusHint">Supports youtube.com/watch, youtu.be, and Shorts links.</div>
+        <div class="hint" id="statusHint">Supports YouTube, Instagram, TikTok, X/Twitter, Facebook, Reddit, and Vimeo links.</div>
       </div>
 
       <div id="result" style="display:none;">
@@ -244,25 +247,31 @@ canvas{max-width:100%;border-radius:8px}
           <img id="thumb" style="width:200px; border-radius:9px; border:1px solid var(--border); flex-shrink:0; object-fit:cover; aspect-ratio:16/9;">
           <div style="flex:1; min-width:200px;">
             <div class="readout">
-              <span class="ro-label">Video</span>
+              <span class="ro-label" id="resultLabel">Video</span>
               <div class="ro-value" id="vidTitle" style="font-size:16px;">&mdash;</div>
               <div class="hint" id="vidMeta" style="margin-top:6px;"></div>
             </div>
           </div>
         </div>
 
-        <label style="display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:10px;">Choose a format</label>
-        <table id="formatTable">
-          <thead><tr><th>Quality</th><th>Type</th><th>Approx. size</th><th></th></tr></thead>
-          <tbody id="formatBody"></tbody>
-        </table>
+        <div id="videoResultArea">
+          <label style="display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:10px;">Choose a format</label>
+          <table id="formatTable">
+            <thead><tr><th>Quality</th><th>Type</th><th>Approx. size</th><th></th></tr></thead>
+            <tbody id="formatBody"></tbody>
+          </table>
+        </div>
+
+        <div id="imageResultArea" style="display:none;">
+          <a class="btn btn-primary btn-block" id="imageDownloadBtn" href="#"><i class="fa-solid fa-download"></i> Download Image</a>
+        </div>
       </div>
     </div>
 
     <div class="divider"></div>
     <div class="note warn">
       <i class="fa-solid fa-triangle-exclamation"></i>
-      <div>Only download content you have the rights to &mdash; your own uploads, permissively licensed videos, or anything else covered by fair use in your situation. This calls your own backend; nothing here talks to YouTube directly from the browser.</div>
+      <div>Only download content you have the rights to &mdash; your own uploads, permissively licensed content, or anything else covered by fair use in your situation. This calls your own backend; nothing here talks to these platforms directly from the browser.</div>
     </div>
 </div>
 
@@ -276,7 +285,7 @@ canvas{max-width:100%;border-radius:8px}
       <div class="site-footer-cols">
         <div class="site-footer-col">
           <div class="site-footer-heading">Tools</div>
-          <a href="/ytdl">YouTube Downloader</a>
+          <a href="/ytdl">Media Downloader</a>
           <a href="/tools">Edit Tools</a>
           <a href="/calculate">Calculate Tools</a>
         </div>
@@ -317,10 +326,37 @@ apiInput.addEventListener('change', function(){ localStorage.setItem(API_KEY, ap
 
 var fetchBtn = document.getElementById('fetchBtn');
 var statusHint = document.getElementById('statusHint');
+var urlInput = document.getElementById('ytUrl');
+var platformIconEl = document.getElementById('platformIcon');
 var currentUrl = '';
 
+// Mirrors the backend's PLATFORMS list — purely cosmetic here (icon + label
+// while typing), the backend is the real source of truth on what's accepted.
+var PLATFORMS = [
+  { id: 'youtube', label: 'YouTube', icon: 'fa-youtube', re: /^https?:\/\/(www\.|m\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[\w-]{6,}/i },
+  { id: 'instagram', label: 'Instagram', icon: 'fa-instagram', re: /^https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|tv)\/[\w-]+/i },
+  { id: 'tiktok', label: 'TikTok', icon: 'fa-tiktok', re: /^https?:\/\/(www\.|vm\.|vt\.)?tiktok\.com\/(@[\w.-]+\/video\/\d+|[\w-]+\/?$)/i },
+  { id: 'twitter', label: 'X / Twitter', icon: 'fa-x-twitter', re: /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/[\w-]+\/status\/\d+/i },
+  { id: 'facebook', label: 'Facebook', icon: 'fa-facebook', re: /^https?:\/\/(www\.|m\.)?facebook\.com\/.+\/(videos|reel)\/[\w-]+/i },
+  { id: 'reddit', label: 'Reddit', icon: 'fa-reddit', re: /^https?:\/\/(www\.)?reddit\.com\/r\/[\w-]+\/comments\/[\w-]+/i },
+  { id: 'vimeo', label: 'Vimeo', icon: 'fa-vimeo', re: /^https?:\/\/(www\.)?vimeo\.com\/\d+/i },
+];
+
+function detectPlatformIcon(url){
+  for(var i=0; i<PLATFORMS.length; i++){
+    if(PLATFORMS[i].re.test(url.trim())) return PLATFORMS[i];
+  }
+  return null;
+}
+
+urlInput.addEventListener('input', function(){
+  var match = detectPlatformIcon(urlInput.value);
+  platformIconEl.className = 'fa-' + (match ? 'brands' : 'solid') + ' ' + (match ? match.icon : 'fa-link');
+  platformIconEl.style.color = match ? 'var(--accent3)' : 'var(--text3)';
+});
+
 fetchBtn.addEventListener('click', run);
-document.getElementById('ytUrl').addEventListener('keydown', function(e){ if(e.key==='Enter') run(); });
+urlInput.addEventListener('keydown', function(e){ if(e.key==='Enter') run(); });
 
 function fmtSize(bytes){
   if(!bytes) return '\u2014';
@@ -335,12 +371,12 @@ function fmtDuration(sec){
 
 async function run(){
   var base = apiInput.value.trim().replace(/\/$/, '');
-  var url = document.getElementById('ytUrl').value.trim();
+  var url = urlInput.value.trim();
   if(!base){ setStatus('Set the backend URL first.', true); return; }
-  if(!url){ setStatus('Paste a YouTube URL.', true); return; }
+  if(!url){ setStatus('Paste a link first.', true); return; }
   currentUrl = url;
 
-  setStatus('Fetching video info\u2026', false);
+  setStatus('Fetching info\u2026', false);
   fetchBtn.disabled = true;
   document.getElementById('result').style.display = 'none';
 
@@ -351,23 +387,40 @@ async function run(){
 
     document.getElementById('thumb').src = data.thumbnail || '';
     document.getElementById('vidTitle').textContent = data.title || url;
+    document.getElementById('resultLabel').textContent = (data.platformLabel || 'Media') + (data.type === 'image' ? ' \u00b7 Photo' : '');
     document.getElementById('vidMeta').textContent = [data.uploader, fmtDuration(data.duration)].filter(Boolean).join(' \u00b7 ');
 
-    var body = document.getElementById('formatBody');
-    body.innerHTML = '';
-    (data.formats || []).forEach(function(f){
-      var tr = document.createElement('tr');
-      var dlUrl = base + '/api/download?url=' + encodeURIComponent(url) + '&format_id=' + encodeURIComponent(f.format_id) + '&title=' + encodeURIComponent(data.title || '');
-      tr.innerHTML =
-        '<td>'+f.label+'</td>' +
-        '<td>'+f.ext.toUpperCase()+'</td>' +
-        '<td>'+fmtSize(f.approx_filesize)+'</td>' +
-        '<td><a class="btn btn-ghost btn-sm" href="'+dlUrl+'"><i class="fa-solid fa-download"></i> Download</a></td>';
-      body.appendChild(tr);
-    });
+    var videoArea = document.getElementById('videoResultArea');
+    var imageArea = document.getElementById('imageResultArea');
+
+    if(data.type === 'image'){
+      videoArea.style.display = 'none';
+      imageArea.style.display = 'block';
+      var dlUrl = base + '/api/download?url=' + encodeURIComponent(url)
+        + '&format_id=' + encodeURIComponent(data.imageUrlFormatId || 'best')
+        + '&title=' + encodeURIComponent(data.title || '')
+        + '&ext=' + encodeURIComponent(data.imageExt || 'jpg');
+      document.getElementById('imageDownloadBtn').href = dlUrl;
+    } else {
+      imageArea.style.display = 'none';
+      videoArea.style.display = 'block';
+      var body = document.getElementById('formatBody');
+      body.innerHTML = '';
+      (data.formats || []).forEach(function(f){
+        var tr = document.createElement('tr');
+        var dlUrl = base + '/api/download?url=' + encodeURIComponent(url) + '&format_id=' + encodeURIComponent(f.format_id) + '&title=' + encodeURIComponent(data.title || '');
+        if(f.exact_filesize){ dlUrl += '&filesize=' + encodeURIComponent(f.exact_filesize); }
+        tr.innerHTML =
+          '<td>'+f.label+'</td>' +
+          '<td>'+f.ext.toUpperCase()+'</td>' +
+          '<td>'+fmtSize(f.approx_filesize)+'</td>' +
+          '<td><a class="btn btn-ghost btn-sm" href="'+dlUrl+'"><i class="fa-solid fa-download"></i> Download</a></td>';
+        body.appendChild(tr);
+      });
+    }
 
     document.getElementById('result').style.display = 'block';
-    setStatus('Supports youtube.com/watch, youtu.be, and Shorts links.', false);
+    setStatus('Supports YouTube, Instagram, TikTok, X/Twitter, Facebook, Reddit, and Vimeo links.', false);
   }catch(e){
     setStatus('Couldn\'t reach the backend: ' + e.message, true);
   }
@@ -378,7 +431,6 @@ function setStatus(msg, isError){
   statusHint.textContent = msg;
   statusHint.style.color = isError ? 'var(--pink-light)' : 'var(--text-faint)';
 }
-</script>
 </script>
 </body>
 </html>
