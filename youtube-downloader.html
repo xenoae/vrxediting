@@ -220,12 +220,12 @@ canvas{max-width:100%;border-radius:8px}
 <div class="panel panel-pad">
       <div class="note" style="margin-bottom:18px;">
         <i class="fa-solid fa-server"></i>
-        <div>This tool needs its backend running &mdash; a small Express service that wraps <code>yt-dlp</code>. Point it at wherever you've deployed <code>server/</code> (defaults to <code>http://localhost:8787</code> if you're running it locally). See <code>server/README.md</code> for setup.</div>
+        <div>Fetches format info and streams downloads through our own backend service &mdash; nothing here talks to YouTube directly from your browser.</div>
       </div>
 
-      <div class="field">
+      <div class="field" style="display:none;">
         <label for="apiBase">Backend URL</label>
-        <input type="text" id="apiBase" placeholder="http://localhost:8787" value="http://localhost:8787">
+        <input type="text" id="apiBase" value="https://vrxediting-production.up.railway.app">
       </div>
 
       <div class="field">
@@ -308,7 +308,6 @@ function switchTab(page, tabId){
   document.getElementById('panel-' + tabId).style.display = 'block';
 }
 </script>
-<script>
 <script>
 var API_KEY = 'vrxediting_api_base';
 var apiInput = document.getElementById('apiBase');

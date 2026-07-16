@@ -394,9 +394,9 @@ function switchTab(page, tabId){
 var currentRatio = 16/9;
 function gcd(a,b){ return b ? gcd(b, a%b) : a; }
 
-document.querySelectorAll('#presetTabs .pill-tab').forEach(function(tab){
+document.querySelectorAll('#calc-ratio-presetTabs .pill-tab').forEach(function(tab){
   tab.addEventListener('click', function(){
-    document.querySelectorAll('#presetTabs .pill-tab').forEach(function(t){ t.classList.remove('active'); });
+    document.querySelectorAll('#calc-ratio-presetTabs .pill-tab').forEach(function(t){ t.classList.remove('active'); });
     tab.classList.add('active');
     var r = tab.dataset.r;
     document.getElementById('calc-ratio-customRatioField').style.display = (r === 'custom') ? 'block' : 'none';
@@ -466,9 +466,9 @@ recalc('width');
 })();
 
 (function(){
-document.querySelectorAll('#modeTabs .pill-tab').forEach(function(tab){
+document.querySelectorAll('#calc-tc-modeTabs .pill-tab').forEach(function(tab){
   tab.addEventListener('click', function(){
-    document.querySelectorAll('#modeTabs .pill-tab').forEach(function(t){ t.classList.remove('active'); });
+    document.querySelectorAll('#calc-tc-modeTabs .pill-tab').forEach(function(t){ t.classList.remove('active'); });
     tab.classList.add('active');
     ['tc2f','f2tc','diff'].forEach(function(m){
       document.getElementById('mode-'+m).style.display = (m === tab.dataset.m) ? 'block' : 'none';
@@ -535,7 +535,7 @@ function framesToTc(frameNum, info){
 
 function compute(){
   var info = fpsInfo();
-  var mode = document.querySelector('#modeTabs .pill-tab.active').dataset.m;
+  var mode = document.querySelector('#calc-tc-modeTabs .pill-tab.active').dataset.m;
   var el = document.getElementById('calc-tc-tcResult');
   var label = document.getElementById('calc-tc-resultLabel');
 
@@ -558,7 +558,7 @@ function compute(){
   }
 }
 
-['tcInput','frameInput','tcStart','tcEnd'].forEach(function(id){
+['calc-tc-tcInput','calc-tc-frameInput','calc-tc-tcStart','calc-tc-tcEnd'].forEach(function(id){
   document.getElementById(id).addEventListener('input', compute);
 });
 document.getElementById('calc-tc-fpsSelect').addEventListener('change', compute);

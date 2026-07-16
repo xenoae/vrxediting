@@ -1043,9 +1043,9 @@ function handleFile(file){
   image.src = url;
 }
 
-document.querySelectorAll('#ratioTabs .pill-tab').forEach(function(tab){
+document.querySelectorAll('#edit-cover-ratioTabs .pill-tab').forEach(function(tab){
   tab.addEventListener('click', function(){
-    document.querySelectorAll('#ratioTabs .pill-tab').forEach(function(t){ t.classList.remove('active'); });
+    document.querySelectorAll('#edit-cover-ratioTabs .pill-tab').forEach(function(t){ t.classList.remove('active'); });
     tab.classList.add('active');
     ratio = parseFloat(tab.dataset.r);
     setupCanvas();
@@ -1125,7 +1125,7 @@ function wrapText(ctx, text, x, y, maxWidth, lineHeight, align){
   lines.forEach(function(l, idx){ ctx.fillText(l, x, startY + idx*lineHeight); });
 }
 
-['titleText','subText','textAlign','accentColor'].forEach(function(id){
+['edit-cover-titleText','edit-cover-subText','edit-cover-textAlign','edit-cover-accentColor'].forEach(function(id){
   document.getElementById(id).addEventListener('input', draw);
 });
 
