@@ -182,8 +182,20 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
 });
 
 // GET /api/download?url=...&format_id=...
+// Strip characters that are invalid or awkward in filenames across
+// Windows/Mac/Linux, collapse whitespace, and cap length.
+function sanitizeFilename(title) {
+  if (!title || typeof title !== 'string') return null;
+  let s = title
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')  // illegal on Windows + control chars
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (s.length > 120) s = s.slice(0, 120).trim();
+  return s || null;
+}
+
 app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
-  const { url, format_id: formatId } = req.query;
+  const { url, format_id: formatId, title } = req.query;
   if (!isValidYoutubeUrl(url)) {
     return res.status(400).json({ error: 'Provide a valid youtube.com or youtu.be URL.' });
   }
@@ -195,23 +207,33 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
     return res.status(400).json({ error: 'Invalid format_id.' });
   }
 
+  const safeTitle = sanitizeFilename(title);
+
   let args;
   let filename;
   if (formatId === 'audio') {
     args = ['-f', 'bestaudio', '-x', '--audio-format', 'mp3', '--no-playlist', '-o', '-', url];
-    filename = 'audio.mp3';
+    filename = (safeTitle || 'audio') + '.mp3';
     res.setHeader('Content-Type', 'audio/mpeg');
   } else if (formatId.includes('+')) {
     // Video-only + audio-only, needs ffmpeg to mux into one file.
     args = ['-f', formatId, '--merge-output-format', 'mp4', '--no-playlist', '-o', '-', url];
-    filename = 'video.mp4';
+    filename = (safeTitle || 'video') + '.mp4';
     res.setHeader('Content-Type', 'video/mp4');
   } else {
     args = ['-f', formatId, '--no-playlist', '-o', '-', url];
-    filename = 'video.mp4';
+    filename = (safeTitle || 'video') + '.mp4';
     res.setHeader('Content-Type', 'video/mp4');
   }
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  // Content-Disposition needs an ASCII-safe fallback (old clients) plus a
+  // UTF-8 encoded version (filename*) so titles with emoji/non-Latin text
+  // still show up correctly in modern browsers instead of getting mangled.
+  const asciiFallback = filename.replace(/[^\x20-\x7E]/g, '_');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}`
+  );
 
   const proc = spawn(YTDLP, ['--no-warnings', ...cookieArgs(), ...args]);
 

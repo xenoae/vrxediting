@@ -356,7 +356,7 @@ async function run(){
     body.innerHTML = '';
     (data.formats || []).forEach(function(f){
       var tr = document.createElement('tr');
-      var dlUrl = base + '/api/download?url=' + encodeURIComponent(url) + '&format_id=' + encodeURIComponent(f.format_id);
+      var dlUrl = base + '/api/download?url=' + encodeURIComponent(url) + '&format_id=' + encodeURIComponent(f.format_id) + '&title=' + encodeURIComponent(data.title || '');
       tr.innerHTML =
         '<td>'+f.label+'</td>' +
         '<td>'+f.ext.toUpperCase()+'</td>' +
