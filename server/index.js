@@ -103,15 +103,47 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
   try {
     const data = await runYtdlpJson(url);
 
-    // Progressive formats only (single file, video+audio already combined) —
-    // these can be piped straight to the response with no server-side muxing.
-    const progressive = (data.formats || [])
+    const allFormats = data.formats || [];
+
+    // Progressive formats (video+audio already combined in one stream) —
+    // these can be piped straight to the response with no merging needed.
+    // YouTube caps these around 720p.
+    const progressive = allFormats
       .filter((f) => f.vcodec && f.vcodec !== 'none' && f.acodec && f.acodec !== 'none' && f.ext === 'mp4')
       .sort((a, b) => (b.height || 0) - (a.height || 0));
 
-    // Dedupe by height, keep the best entry per resolution.
+    // Video-only formats (DASH) — this is where 1080p/1440p/4K actually live.
+    // These need to be merged with a separate audio track via ffmpeg.
+    const videoOnly = allFormats
+      .filter((f) => f.vcodec && f.vcodec !== 'none' && (!f.acodec || f.acodec === 'none') && (f.ext === 'mp4' || f.ext === 'webm'))
+      .sort((a, b) => (b.height || 0) - (a.height || 0));
+
+    // Best available audio-only track to pair with video-only formats.
+    const bestAudio = allFormats
+      .filter((f) => f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'))
+      .sort((a, b) => (b.abr || 0) - (a.abr || 0))[0];
+
     const seen = new Set();
     const formats = [];
+
+    // High-res merged formats first (what people actually want when they ask for 4K).
+    if (bestAudio) {
+      for (const f of videoOnly) {
+        const h = f.height || 0;
+        if (h < 1080 || seen.has(h)) continue; // below 1080 the progressive list already covers it
+        seen.add(h);
+        formats.push({
+          format_id: `${f.format_id}+${bestAudio.format_id}`,
+          height: h,
+          label: h >= 2160 ? `${h}p (4K)` : h >= 1440 ? `${h}p (2K)` : `${h}p`,
+          ext: 'mp4',
+          approx_filesize: (f.filesize || f.filesize_approx || 0) + (bestAudio.filesize || bestAudio.filesize_approx || 0) || null,
+          merged: true,
+        });
+      }
+    }
+
+    // Progressive formats fill in 720p and below.
     for (const f of progressive) {
       const h = f.height || 0;
       if (seen.has(h)) continue;
@@ -122,8 +154,11 @@ app.get('/api/info', rateLimit(20, 60_000), async (req, res) => {
         label: h ? `${h}p` : (f.format_note || f.format_id),
         ext: f.ext,
         approx_filesize: f.filesize || f.filesize_approx || null,
+        merged: false,
       });
     }
+
+    formats.sort((a, b) => b.height - a.height);
 
     // Always offer an audio-only option (extracted to mp3 server-side).
     formats.push({ format_id: 'audio', height: 0, label: 'Audio only (MP3)', ext: 'mp3', approx_filesize: null });
@@ -149,6 +184,10 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
   if (!formatId) {
     return res.status(400).json({ error: 'Missing format_id — call /api/info first.' });
   }
+  // format_id is either "audio", a plain format code, or "videoId+audioId" for merged high-res.
+  if (formatId !== 'audio' && !/^[\w.+-]+$/.test(formatId)) {
+    return res.status(400).json({ error: 'Invalid format_id.' });
+  }
 
   let args;
   let filename;
@@ -156,6 +195,11 @@ app.get('/api/download', rateLimit(10, 60_000), (req, res) => {
     args = ['-f', 'bestaudio', '-x', '--audio-format', 'mp3', '--no-playlist', '-o', '-', url];
     filename = 'audio.mp3';
     res.setHeader('Content-Type', 'audio/mpeg');
+  } else if (formatId.includes('+')) {
+    // Video-only + audio-only, needs ffmpeg to mux into one file.
+    args = ['-f', formatId, '--merge-output-format', 'mp4', '--no-playlist', '-o', '-', url];
+    filename = 'video.mp4';
+    res.setHeader('Content-Type', 'video/mp4');
   } else {
     args = ['-f', formatId, '--no-playlist', '-o', '-', url];
     filename = 'video.mp4';
