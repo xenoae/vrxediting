@@ -716,7 +716,7 @@ document.getElementById('edit-srt-shiftBtn').addEventListener('click', function(
   var vtt = currentExt === 'vtt';
   var lines = srtText.value.split(/\r?\n/);
   var re = /(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*--&gt;\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})/;
-  var reAlt = /(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})/;
+  var reAlt = /(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-\->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})/;
   var count = 0;
   var out = lines.map(function(line){
     var m = line.match(reAlt) || line.match(re);
@@ -724,7 +724,7 @@ document.getElementById('edit-srt-shiftBtn').addEventListener('click', function(
     var start = tsToMs(m[1]) + amount;
     var end = tsToMs(m[2]) + amount;
     count++;
-    return msToTs(start, vtt) + ' --> ' + msToTs(end, vtt);
+    return msToTs(start, vtt) + ' --' + '> ' + msToTs(end, vtt);
   }).join('\n');
 
   shiftedResult = out;
